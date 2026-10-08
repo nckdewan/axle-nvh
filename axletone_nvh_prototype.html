@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101722">
+<title>AxleTone — NVH Prototype</title>
+<style>
+:root{color-scheme:dark;--bg:#0b111a;--panel:#141e2b;--line:#263548;--text:#edf4fb;--muted:#9aadc1;--accent:#63e6be;--blue:#72a7ff;--warn:#ffce73}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#0b111a,#101b29 70%,#0b111a);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 14px calc(24px + env(safe-area-inset-bottom));max-width:900px;margin-inline:auto}
+header{padding:18px 2px 12px} .eyebrow{font-size:11px;letter-spacing:.18em;color:var(--accent);font-weight:800}h1{font-size:29px;line-height:1.1;margin:6px 0}p{margin:6px 0;color:var(--muted)}.tag{display:inline-block;border:1px solid #36516a;border-radius:99px;padding:4px 9px;font-size:11px;color:#b9d5f0;margin-top:8px}
+.panel{background:rgba(20,30,43,.94);border:1px solid var(--line);border-radius:17px;padding:15px;margin:12px 0;box-shadow:0 8px 24px #0002}h2{font-size:16px;margin:0 0 12px}label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}input,select,textarea{width:100%;background:#0b131e;color:var(--text);border:1px solid #34475c;border-radius:10px;padding:11px;font:inherit;min-height:43px} .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}
+button{border:0;border-radius:12px;padding:13px 15px;font:700 15px inherit;min-height:46px;cursor:pointer}button:disabled{opacity:.45}.primary{background:var(--accent);color:#06241b}.secondary{background:#26384d;color:var(--text);border:1px solid #3b526a}.danger{background:#48252d;color:#ffdfe4;border:1px solid #713a45}.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:12px}.dot{width:9px;height:9px;border-radius:50%;background:#718096}.dot.live{background:var(--accent);box-shadow:0 0 12px #63e6be88}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.metric{background:#0b131e;border:1px solid #27384b;border-radius:12px;padding:11px 9px;min-width:0}.metric small{display:block;color:var(--muted);font-size:11px}.metric strong{display:block;font-size:20px;margin-top:3px;overflow-wrap:anywhere}.metric span{font-size:11px;color:var(--muted)}canvas{display:block;width:100%;height:190px;background:#09111b;border:1px solid #26384b;border-radius:12px}#wave{height:90px}.note{font-size:12px;color:var(--muted)}.warning{border-left:3px solid var(--warn);padding:9px 11px;background:#2a2418;border-radius:5px;color:#f2ddb0;font-size:12px}.good{color:var(--accent)}.peakrow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #253548;font-variant-numeric:tabular-nums}.peakrow:last-child{border-bottom:0}.peakrow span:last-child{text-align:right}.hidden{display:none!important}
+@media(min-width:700px){.layout{display:grid;grid-template-columns:1fr 1fr;gap:12px}.layout .panel{margin:0 0 12px}.wide{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<header>
+ <div class="eyebrow">FIELD ENGINEERING TOOL · V0.1</div>
+ <h1>AxleTone <span style="color:var(--accent)">/</span> NVH</h1>
+ <p>Audio-first tonal noise investigation for axle & driveline rigs.</p>
+ <span class="tag">PROTOTYPE · NOT A CERTIFIED MEASUREMENT SYSTEM</span>
+</header>
+<div class="panel">
+ <h2>Test record</h2>
+ <div class="grid">
+  <div><label for="testId">Test / build ID</label><input id="testId" placeholder="e.g. AX-042 / build 3"></div>
+  <div><label for="condition">Test condition</label><select id="condition"><option>Drive</option><option>Coast</option><option>Drive / coast transition</option><option>No-load spin</option><option>Other</option></select></div>
+  <div><label for="distance">Mic position / distance</label><input id="distance" placeholder="e.g. 200 mm from pinion"></div>
+  <div><label for="notes">Observation</label><input id="notes" placeholder="e.g. whine at mid speed"></div>
+ </div>
+ <p class="note" style="margin-top:10px">Keep microphone position, orientation, phone case, gain path and rig condition consistent between comparisons.</p>
+</div>
+<div class="layout">
+ <div class="panel">
+  <h2>1 · Capture</h2>
+  <div class="status"><span id="dot" class="dot"></span><span id="status">Microphone not active</span></div>
+  <div class="actions">
+   <button id="start" class="primary">Start listening</button>
+   <button id="stop" class="danger" disabled>Stop</button>
+  </div>
+  <div class="metrics" style="margin-top:12px">
+   <div class="metric"><small>Dominant peak</small><strong id="peakHz">—</strong><span>Hz · current frame</span></div>
+   <div class="metric"><small>Peak level</small><strong id="peakDb">—</strong><span>dBFS estimate</span></div>
+   <div class="metric"><small>Input sample rate</small><strong id="sampleRate">—</strong><span>Hz reported by browser</span></div>
+  </div>
+  <p class="note" style="margin-top:10px">Tap Start and allow microphone access. Keep the phone stationary and secured away from rotating parts. Never handle the phone near exposed rotating machinery.</p>
+ </div>
+ <div class="panel">
+  <h2>2 · Spectrum</h2>
+  <canvas id="spectrum" width="900" height="380" aria-label="Live frequency spectrum"></canvas>
+  <div class="grid" style="margin-top:10px">
+   <div><label for="minHz">Display minimum (Hz)</label><input id="minHz" type="number" min="0" max="20000" value="20"></div>
+   <div><label for="maxHz">Display maximum (Hz)</label><input id="maxHz" type="number" min="100" max="24000" value="5000"></div>
+  </div>
+  <p class="note">FFT bin spacing depends on sample rate and FFT size. Peaks are exploratory and microphone response is not calibrated.</p>
+ </div>
+ <div class="panel">
+  <h2>3 · Signal level history</h2>
+  <canvas id="wave" width="900" height="180"></canvas>
+  <div class="metrics" style="margin-top:10px">
+   <div class="metric"><small>RMS level</small><strong id="rms">—</strong><span>relative, dBFS</span></div>
+   <div class="metric"><small>Recording time</small><strong id="elapsed">00:00</strong><span>current session</span></div>
+   <div class="metric"><small>Frames sampled</small><strong id="frames">0</strong><span>live FFT updates</span></div>
+  </div>
+ </div>
+ <div class="panel">
+  <h2>4 · Strong tonal peaks</h2>
+  <p class="note">Approximate local maxima in the selected band. Use these to compare repeatable runs, not as automatic fault labels.</p>
+  <div id="peaks"><p>No live data yet.</p></div>
+  <div class="actions" style="margin-top:12px">
+   <button id="snapshot" class="secondary" disabled>Save snapshot</button>
+   <button id="export" class="secondary" disabled>Export CSV</button>
+  </div>
+ </div>
+</div>
+<div class="panel">
+ <h2>Engineering guardrails</h2>
+ <div class="warning">Phone audio is affected by automatic gain control, noise suppression, microphone placement and frequency response. This prototype does not provide calibrated SPL, gear-mesh order, pinion RPM, or a definitive diagnosis.</div>
+ <p class="note" style="margin-top:10px">Initial target: compare dominant tones between controlled runs. Next development step: save WAV audio and snapshots, then add run-to-run overlays. Order tracking requires a reliable speed reference; microphone-only speed estimation is not assumed.</p>
+</div>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+ const spectrumCanvas=$('spectrum'), sctx=spectrumCanvas.getContext('2d');
+ const waveCanvas=$('wave'), wctx=waveCanvas.getContext('2d');
+ let audioCtx=null, analyser=null, stream=null, source=null, raf=0, startedAt=0, frames=0, history=[], snapshots=[], mediaRecorder=null, chunks=[];
+ const fftSize=16384;
+ let freqData=null, timeData=null, lastPeaks=[];
+ function fmtTime(sec){const m=Math.floor(sec/60),s=Math.floor(sec%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
+ function drawGrid(ctx,w,h,labels){ctx.clearRect(0,0,w,h);ctx.fillStyle='#09111b';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#233447';ctx.lineWidth=1;ctx.fillStyle='#91a5ba';ctx.font='22px -apple-system, sans-serif';for(let i=0;i<=4;i++){let y=20+(h-48)*i/4;ctx.beginPath();ctx.moveTo(45,y);ctx.lineTo(w-12,y);ctx.stroke();ctx.fillText(labels[i],4,y+7)}}
+ function drawSpectrum(){
+  const w=spectrumCanvas.width,h=spectrumCanvas.height;
+  drawGrid(sctx,w,h,['0 dB','-20','-40','-60','-80']);
+  if(!analyser||!freqData)return;
+  analyser.getFloatFrequencyData(freqData);
+  const sr=audioCtx.sampleRate, bin=sr/fftSize;
+  const min=Math.max(0,Number($('minHz').value)||20), max=Math.min(sr/2,Math.max(min+10,Number($('maxHz').value)||5000));
+  const left=45,right=w-12,top=20,bottom=h-28;
+  sctx.strokeStyle='#63e6be';sctx.lineWidth=2;sctx.beginPath();let began=false;
+  for(let i=1;i<freqData.length;i++){
+   const f=i*bin;if(f<min||f>max)continue;
+   const x=left+(f-min)/(max-min)*(right-left);
+   const db=Math.max(-80,Math.min(0,freqData[i]));
+   const y=top+((-db)/80)*(bottom-top);
+   if(!began){sctx.moveTo(x,y);began=true}else sctx.lineTo(x,y)
+  }
+  sctx.stroke();sctx.fillStyle='#91a5ba';sctx.font='20px -apple-system,sans-serif';sctx.fillText(min+' Hz',left,bottom+23);sctx.fillText(max+' Hz',right-100,bottom+23);
+  // approximate local maxima; exclude very low frequencies and report top 5 by level
+  let candidates=[];
+  for(let i=2;i<freqData.length-2;i++){
+   const f=i*bin, db=freqData[i];if(f<min||f>max||db < -75)continue;
+   if(db>freqData[i-1]&&db>=freqData[i+1])candidates.push({hz:f,db});
+  }
+  candidates.sort((a,b)=>b.db-a.db);lastPeaks=candidates.slice(0,5);
+  const strongest=lastPeaks[0];
+  $('peakHz').textContent=strongest?Math.round(strongest.hz):'—';
+  $('peakDb').textContent=strongest?strongest.db.toFixed(1):'—';
+  $('peaks').innerHTML=lastPeaks.length?lastPeaks.map((p,i)=>'<div class="peakrow"><span>'+(i+1)+'. '+p.hz.toFixed(1)+' Hz</span><span>'+p.db.toFixed(1)+' dBFS est.</span></div>').join(''):'<p>No clear peaks in this band.</p>';
+ }
+ function drawWave(rms){
+  const w=waveCanvas.width,h=waveCanvas.height;drawGrid(wctx,w,h,['0','-20','-40','-60','-80']);
+  const left=45,right=w-12,top=15,bottom=h-20;
+  history.push({t:(performance.now()-startedAt)/1000,db:rms});if(history.length>160)history.shift();
+  if(history.length<2)return;
+  wctx.strokeStyle='#72a7ff';wctx.lineWidth=3;wctx.beginPath();
+  history.forEach((p,i)=>{const x=left+i/(Math.max(1,history.length-1))*(right-left),y=top+(Math.max(-80,Math.min(0,p.db))/-80)*(bottom-top);i?wctx.lineTo(x,y):wctx.moveTo(x,y)});wctx.stroke();
+ }
+ function tick(){
+  if(!analyser)return;
+  analyser.getFloatTimeDomainData(timeData);
+  let sum=0;for(let i=0;i<timeData.length;i++)sum+=timeData[i]*timeData[i];
+  const rms=Math.sqrt(sum/timeData.length), db=20*Math.log10(Math.max(rms,1e-8));
+  $('rms').textContent=db.toFixed(1);frames++;$('frames').textContent=frames;
+  $('elapsed').textContent=fmtTime((performance.now()-startedAt)/1000);
+  drawSpectrum();drawWave(db);raf=requestAnimationFrame(tick)
+ }
+ async function start(){
+  try{
+   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Microphone access is unavailable. Open the site over HTTPS in Safari.');
+   stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+   await audioCtx.resume();
+   source=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=fftSize;analyser.smoothingTimeConstant=0.25;source.connect(analyser);
+   freqData=new Float32Array(analyser.frequencyBinCount);timeData=new Float32Array(analyser.fftSize);
+   $('sampleRate').textContent=audioCtx.sampleRate.toLocaleString();startedAt=performance.now();frames=0;history=[];lastPeaks=[];
+   $('dot').classList.add('live');$('status').textContent='Listening — live analysis active';
+   $('start').disabled=true;$('stop').disabled=false;$('snapshot').disabled=false;$('export').disabled=false;
+   if(window.MediaRecorder){try{chunks=[];mediaRecorder=new MediaRecorder(stream);mediaRecorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};mediaRecorder.start(1000)}catch(e){mediaRecorder=null}}
+   tick();
+  }catch(err){$('status').textContent='Could not start: '+(err.message||err);$('dot').classList.remove('live')}
+ }
+ function stop(){
+  cancelAnimationFrame(raf);if(mediaRecorder&&mediaRecorder.state!=='inactive'){mediaRecorder.stop()}
+  if(stream)stream.getTracks().forEach(t=>t.stop());if(audioCtx)audioCtx.close();
+  stream=null;audioCtx=null;analyser=null;source=null;
+  $('dot').classList.remove('live');$('status').textContent='Stopped';$('start').disabled=false;$('stop').disabled=true;
+ }
+ function currentRecord(){
+  return {timestamp:new Date().toISOString(),testId:$('testId').value,condition:$('condition').value,micPosition:$('distance').value,observation:$('notes').value,dominantHz:lastPeaks[0]?.hz??'',peakDbFS:lastPeaks[0]?.db??'',rmsDbFS:$('rms').textContent,sampleRateHz:$('sampleRate').textContent,elapsed:$('elapsed').textContent,peaks:lastPeaks.map(p=>({hz:Number(p.hz.toFixed(2)),dbFS:Number(p.db.toFixed(2))}))}
+ }
+ function snapshot(){snapshots.push(currentRecord());$('status').textContent='Snapshot saved in this page session ('+snapshots.length+')'}
+ function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"'}
+ function exportCsv(){
+  if(!snapshots.length)snapshots.push(currentRecord());
+  const rows=[['timestamp','testId','condition','micPosition','observation','dominantHz','peakDbFS','rmsDbFS','sampleRateHz','elapsed','peaksJSON'],...snapshots.map(r=>[r.timestamp,r.testId,r.condition,r.micPosition,r.observation,r.dominantHz,r.peakDbFS,r.rmsDbFS,r.sampleRateHz,r.elapsed,JSON.stringify(r.peaks)])];
+  const blob=new Blob([rows.map(row=>row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='axletone-snapshots.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
+ }
+ $('start').addEventListener('click',start);$('stop').addEventListener('click',stop);$('snapshot').addEventListener('click',snapshot);$('export').addEventListener('click',exportCsv);
+ $('minHz').addEventListener('change',()=>{if(analyser)drawSpectrum()});$('maxHz').addEventListener('change',()=>{if(analyser)drawSpectrum()});
+ window.addEventListener('pagehide',stop);
+ // Initial empty visual
+ drawGrid(sctx,spectrumCanvas.width,spectrumCanvas.height,['0 dB','-20','-40','-60','-80']);drawGrid(wctx,waveCanvas.width,waveCanvas.height,['0','-20','-40','-60','-80']);
+})();
+</script>
+</body>
+</html>
